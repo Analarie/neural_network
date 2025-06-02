@@ -1,274 +1,239 @@
-import pygame, sys, time, random
-from pygame.locals import *
-import math
+import pygame
+import sys
+import random
 import numpy as np
+from random import uniform
+import time
 
-global pesos, bias, melhor_tempo, melhores_pesos, melhor_bias
-global historico
+class RedeNeural:
+    def __init__(self):
+        # Inicializa pesos da rede como atributos do objeto
+        self.pesosPrimeiroNeuronioCamadaEntrada = np.array([uniform(-1, 1) for _ in range(4)])
+        self.pesosSegundoNeuronioCamadaEntrada = np.array([uniform(-1, 1) for _ in range(4)])
 
-pesos = np.random.uniform(-1, 1, size=5)
-bias = np.random.uniform(-1, 1)
-melhor_tempo = 0
-melhores_pesos = pesos.copy()
-melhor_bias = bias
-historico = []
-partidas_jogadas = 0
+        self.pesosPrimeiroNeuronioCamadaOculta = np.array([uniform(-1, 1) for _ in range(2)])
+        self.pesosSegundoNeuronioCamadaOculta = np.array([uniform(-1, 1) for _ in range(2)])
 
-def neural_net(inputs, pesos, bias):
-    # inputs e pesos são arrays NumPy
-    soma = np.dot(inputs, pesos) + bias
-    return np.tanh(soma)
+        self.pesosNeuronioDeSaida = np.array([uniform(-1, 1) for _ in range(2)])
 
-def mutar(pesos, bias, sigma=0.1):
-    novos_pesos = pesos + np.random.normal(0, sigma, pesos.shape)
-    novo_bias = bias + np.random.normal(0, sigma)
-    return novos_pesos, novo_bias
+        self.resultado = 0
 
-def treinar_com_historico(historico, pesos, bias, fitness, taxa=0.01):
-    for inputs, decisao in historico:
-        erro = fitness - decisao
-        pesos += taxa * erro * inputs
-        bias += taxa * erro
-    return pesos, bias
+    def feedforward(self, YRaquete, XBolinha, YBola, bias=-1):
+        entradas = np.array([YRaquete, XBolinha, YBola, bias])
 
-# Função que inicializa o jogo com uma janela do tamanho (w, h)
-def game_init(w,h):
-    pygame.init()
-    width,height = w,h
-    size = width,height
-    display = pygame.display.set_mode(size)
-    pygame.display.set_caption("Ping Pong")
-    return display
+        self.saidaPrimeiroNeuronioCamadaEntrada = round(
+            np.tanh(np.sum(entradas * self.pesosPrimeiroNeuronioCamadaEntrada)), 6)
 
-# Função atual que move o jogador com base no teclado (será substituída pela IA)
-#ajeitar essa parte do código 
-historico = []
-def move_player(rect_x):
-    inputs = np.array([x_cor, y_cor, x_change, y_change, rect_x])
-    decisao = neural_net(inputs, pesos, bias)  # inclui bias
-    historico.append((inputs.copy(), decisao))
+        self.saidaSegundoNeuronioCamadaEntrada = round(
+            np.tanh(np.sum(entradas * self.pesosSegundoNeuronioCamadaEntrada)), 6)
 
-    if decisao < -0.3:
-        rect_x -= 5
-    elif decisao > 0.3:
-        rect_x += 5
+        self.saidaPrimeiroNeuronioCamadaOculta = round(
+            np.tanh(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaEntrada,
+                                    self.saidaPrimeiroNeuronioCamadaEntrada]) * self.pesosPrimeiroNeuronioCamadaOculta)),
+            6)
 
-    rect_x = max(0, min(rect_x, width - 100))
-    return rect_x
+        self.saidaSegundoNeuronioCamadaOculta = round(
+            np.tanh(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaEntrada,
+                                    self.saidaSegundoNeuronioCamadaEntrada]) * self.saidaSegundoNeuronioCamadaEntrada)),
+            6)
 
-def tela_fim(display, texto, font, text_color):
-    display.fill((0,0,0))
-    text_surface = font.render(texto, True, text_color)
-    rect = text_surface.get_rect(center=(width//2, height//2 - 30))
-    display.blit(text_surface, rect)
+        self.resultado = round(self.sigmoid(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaOculta,
+                                                            self.saidaSegundoNeuronioCamadaOculta]) * self.pesosNeuronioDeSaida)), 6)
 
-    instrucao = font.render("Pressione R para Reiniciar ou Q para Sair", True, text_color)
-    rect2 = instrucao.get_rect(center=(width//2, height//2 + 30))
-    display.blit(instrucao, rect2)
+        return self.resultado
 
-    pygame.display.flip()
+    def sigmoid(self, x):
+        return 1 / (1 + np.exp(-x))
 
-# Dimensões da janela
-width,height = 640, 480
-display = game_init(width,height)
-display_window = pygame.display.set_mode((width, height))
+    def atualizaPesos(self, erro, alpha=0.01):
+        for i in range(len(self.pesosNeuronioDeSaida)):
+            entrada = self.saidaPrimeiroNeuronioCamadaOculta if i == 0 else self.saidaSegundoNeuronioCamadaOculta
+            self.pesosNeuronioDeSaida[i] += alpha * entrada * erro
 
-fps = 25  # frames por segundo
+        for i in range(len(self.pesosPrimeiroNeuronioCamadaOculta)):
+            entrada1 = self.saidaPrimeiroNeuronioCamadaEntrada if i == 0 else self.saidaSegundoNeuronioCamadaEntrada
+            self.pesosPrimeiroNeuronioCamadaOculta[i] += alpha * entrada1 * erro
 
-sec = 0  # contador de tempo
-t = pygame.time.get_ticks()  # tempo inicial
-clock = pygame.time.Clock()  # controle de FPS
+        for i in range(len(self.pesosSegundoNeuronioCamadaOculta)):
+            entrada2 = self.saidaPrimeiroNeuronioCamadaEntrada if i == 0 else self.saidaSegundoNeuronioCamadaEntrada
+            self.pesosSegundoNeuronioCamadaOculta[i] += alpha * entrada2 * erro
 
-# Cores
-green = (0,200,200)
-black = (0, 0, 0)
-white = (255, 255, 255)
+        for i in range(len(self.pesosPrimeiroNeuronioCamadaEntrada)):
+            self.pesosPrimeiroNeuronioCamadaEntrada[i] += alpha * erro
 
-font = pygame.font.Font(None,30)
-text_color = green
+        for i in range(len(self.pesosSegundoNeuronioCamadaEntrada)):
+            self.pesosSegundoNeuronioCamadaEntrada[i] += alpha * erro
 
-# Posição inicial da barra (player)
-rect_x = 272
-rect_y = 470
 
-floor_collision = False  # controle de colisão com o chão
-win = False              # controle de vitória
+class PongGame:
+    def __init__(self, width=640, height=480):
+        pygame.init()
+        self.width = width
+        self.height = height
+        self.display = pygame.display.set_mode((width, height))
+        pygame.display.set_caption("Ping Pong")
+        self.clock = pygame.time.Clock()
 
-# Posição e velocidade inicial da bola
-x_cor = random.randint(15, width - 15)
-y_cor = random.randint(15, height - 15)
-x_change = random.randint(3, 7)
-y_change = random.randint(3, 7)
+        self.green = (0, 200, 200)
+        self.black = (0, 0, 0)
+        self.white = (255, 255, 255)
+        self.font = pygame.font.Font(None, 30)
 
-coordinates = []  # não está sendo usada no momento
+        self.rect_x = 272
+        self.rect_y = 470
+        self.x_cor = random.randint(15, width - 15)
+        self.y_cor = random.randint(15, height - 15)
+        self.x_change = random.randint(3, 7)
+        self.y_change = random.randint(3, 7)
 
-music = pygame.mixer.Sound('musics/endofline.ogg')
+        self.floor_collision = False
+        self.win = False
+        self.sec = 0
+        self.t = pygame.time.get_ticks()
 
-# ============ LOOP PRINCIPAL ============
+        self.melhor_tempo = 0
+        self.partidas_jogadas = 0
 
-while True:
-    # Eventos do teclado
-    for event in pygame.event.get():
-        if event.type == QUIT:
-            pygame.quit()
-            sys.exit()
-        
-        if event.type == KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
-                pygame.quit()
-                sys.exit()
+        # Inicializa rede neural
+        self.rede = RedeNeural()
+        self.melhores_pesos = [
+            self.rede.pesosPrimeiroNeuronioCamadaEntrada.copy(),
+            self.rede.pesosSegundoNeuronioCamadaEntrada.copy(),
+            self.rede.pesosPrimeiroNeuronioCamadaOculta.copy(),
+            self.rede.pesosSegundoNeuronioCamadaOculta.copy(),
+            self.rede.pesosNeuronioDeSaida.copy()
+        ]
 
-    key = pygame.key.get_pressed()
+        # Aqui criamos a lista para armazenar histórico (entradas, decisões)
+        self.historico = []
 
-    # Atualiza o contador de tempo
-    if ((pygame.time.get_ticks()-t) >= 1000):
-        sec += 1
-        t = pygame.time.get_ticks()
-        if (sec <= 60):
-            if floor_collision == True:
-                sec -= 1  # se perdeu, não conta tempo
-            elif (sec >= 60):
-                win = True
+    def move_player(self):
+        decisao = self.rede.feedforward(self.rect_x, self.x_cor, self.y_cor)
+        movimento = (decisao - 0.5) * 10  # movimento entre -5 e 5
 
-    music.play()  # toca a música
+        # Salvar entradas e decisão no histórico
+        self.historico.append((self.rect_x, self.x_cor, self.y_cor, movimento))
 
-    rect_x = move_player(rect_x)
-    if floor_collision:
-        partidas_jogadas += 1
+        # Corrige movimento para evitar ficar preso nos cantos
+        if self.rect_x <= 0 and movimento < 0:
+            movimento = abs(movimento)
+        elif self.rect_x >= self.width - 100 and movimento > 0:
+            movimento = -abs(movimento)
 
-        fitness = sec  # fitness = tempo sobrevivido
+        self.rect_x += movimento
+        self.rect_x = max(0, min(self.rect_x, self.width - 100))
 
-        # Treina com dados da partida
-        pesos, bias = treinar_com_historico(historico, pesos, bias, fitness)
+    def atualizar_bola(self):
+        self.x_cor += self.x_change
+        self.y_cor += self.y_change
 
-        # Seleção simples
-        if fitness >= melhor_tempo:
-            melhor_tempo = fitness
-            melhores_pesos = pesos.copy()
-            melhor_bias = bias
+        # Colisão com paredes laterais
+        if self.x_cor > (self.width - 15) or self.x_cor < 15:
+            self.x_change *= -1
+
+        # Colisão com topo e chão
+        if self.y_cor < 15:
+            self.y_change *= -1
+
+        # Colisão com a barra
+        barra_rect = pygame.Rect(self.rect_x, self.rect_y, 100, 100)
+        bola_rect = pygame.Rect(self.x_cor - 15, self.y_cor - 15, 30, 30)
+
+        if bola_rect.colliderect(barra_rect):
+            self.y_change *= -1
+
+        # Bola passou da barra
+        if self.y_cor > self.height - 20:
+            self.floor_collision = True
+            self.y_change *= -1
+
+    def treinar_rede(self):
+        fitness = self.sec
+        self.partidas_jogadas += 1
+
+        if fitness >= self.melhor_tempo:
+            self.melhor_tempo = fitness
+            # Salva pesos atuais
+            self.melhores_pesos = [
+                self.rede.pesosPrimeiroNeuronioCamadaEntrada.copy(),
+                self.rede.pesosSegundoNeuronioCamadaEntrada.copy(),
+                self.rede.pesosPrimeiroNeuronioCamadaOculta.copy(),
+                self.rede.pesosSegundoNeuronioCamadaOculta.copy(),
+                self.rede.pesosNeuronioDeSaida.copy()
+            ]
         else:
-            pesos = melhores_pesos.copy()
-            bias = melhor_bias
+            # Carrega melhores pesos
+            (
+                self.rede.pesosPrimeiroNeuronioCamadaEntrada,
+                self.rede.pesosSegundoNeuronioCamadaEntrada,
+                self.rede.pesosPrimeiroNeuronioCamadaOculta,
+                self.rede.pesosSegundoNeuronioCamadaOculta,
+                self.rede.pesosNeuronioDeSaida
+            ) = self.melhores_pesos
 
-        # A cada 10 partidas faz mutação para explorar
-        if partidas_jogadas % 10 == 0:
-            pesos, bias = mutar(pesos, bias, sigma=0.1)
+        # Treina com todo o histórico acumulado
+        for entrada_raquete, entrada_bola_x, entrada_bola_y, movimento in self.historico:
+            erro = (entrada_raquete + movimento - entrada_bola_y) / 100  # erro simples (ajuste conforme desejar)
+            self.rede.feedforward(entrada_raquete, entrada_bola_x, entrada_bola_y)
+            self.rede.atualizaPesos(erro)
 
-        # Reseta variáveis para próximo jogo
-        historico.clear()
-        floor_collision = False
-        sec = 0
+        self.historico.clear()
+        self.sec = 0
+        self.floor_collision = False
 
-    
+    def desenhar(self):
+        self.display.fill(self.black)
 
-    # Atualiza posição da bola
-    x_cor += x_change
-    y_cor += y_change
+        # Texto tempo
+        time_text = self.font.render(f"Tempo: {self.sec}s", True, self.green)
+        self.display.blit(time_text, (10, 10))
 
-    # Limpa tela
-    display_window.fill(black)
+        # Bola
+        pygame.draw.circle(self.display, self.white, (int(self.x_cor), int(self.y_cor)), 15)
 
-    # Desenha o tempo na tela
-    time_text = font.render("Time: " + str(sec) + "s", True, text_color)
-    display.blit(time_text,(10,10))
+        # Barra jogador
+        pygame.draw.rect(self.display, self.white, (self.rect_x, self.rect_y, 100, 100))
 
-    # Desenha bolas passadas (sem uso prático no momento)
-    for coordinate in coordinates:
-        circle = pygame.draw.circle(display_window, white, (coordinate[0], coordinate[1]), 15, 0)
-
-    # Desenha a bola atual
-    circle = pygame.draw.circle(display_window, white, (x_cor, y_cor), 15, 0)
-
-    # Desenha a barra do jogador
-    rect = pygame.draw.rect(display, white, [rect_x, rect_y, 100, 100])
-
-    # Tela de fim de jogo
-    if floor_collision == True:
-        display_window.fill(black)
-        music.stop()
-        text_fim = font.render("Game Over!", True, text_color)
-        text_fim_rect = text_fim.get_rect()
-        text_fim_rect.center = (display.get_width()//2, display.get_height()//2)
-        display.blit(text_fim,text_fim_rect)
-        esperando = True
-        while esperando:
+    def loop_principal(self):
+        running = True
+        while running:
+            # Eventos
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
+                    running = False
                 if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_r: 
-    # Só aceita a mutação se o jogo anterior foi melhor ou igual ao melhor até agora
-                        if sec >= melhor_tempo:
-                            melhor_tempo = sec
-                            melhores_pesos = pesos
-                            melhor_bias = bias
-                        else:
-                            pesos = melhores_pesos
-                            bias = melhor_bias
+                    if event.key == pygame.K_ESCAPE:
+                        running = False
 
-                        # Aplica mutação
-                        pesos, bias = mutar(pesos, bias, sigma=0.1)
-                        floor_collision = False
-                        sec = 0
-                        t = pygame.time.get_ticks()
+            # Atualiza tempo
+            if pygame.time.get_ticks() - self.t >= 1000:
+                self.sec += 1
+                self.t = pygame.time.get_ticks()
+                if self.sec >= 60:
+                    self.win = True
+                if self.floor_collision:
+                    self.sec -= 1  # Não conta se perdeu
 
-                        # resetar posição e velocidade da bola
-                        x_cor = random.randint(15, width - 15)
-                        y_cor = random.randint(15, height - 15)
-                        x_change = random.randint(3, 7)
-                        y_change = random.randint(3, 7)
+            self.move_player()
+            self.atualizar_bola()
+            self.desenhar()
 
-                        # resetar posição da barra (opcional)
-                        rect_x = 272
+            if self.floor_collision:
+                self.treinar_rede()
 
-                        music.play()
-                        esperando = False
-                    elif event.key == pygame.K_q:  # sair
-                        pygame.quit()
-                        sys.exit()
-            clock.tick(10)  # espera 10 FPS no loop de pausa
-        continue  # volta para início do loop principal
+            if self.win:
+                self.display.fill(self.black)
+                win_text = self.font.render("You Win!", True, self.green)
+                rect = win_text.get_rect(center=(self.width // 2, self.height // 2))
+                self.display.blit(win_text, rect)
 
-    # Tela de vitória
-    elif win == True:
-        display_window.fill(black)
-        music.stop()
-        text_fim = font.render("You Win!", True, text_color)
-        text_fim_rect = text_fim.get_rect()
-        text_fim_rect.center = (display.get_width()//2, display.get_height()//2)
-        display.blit(text_fim,text_fim_rect)
+            pygame.display.flip()
+            self.clock.tick(25)
 
-    # Colisão com paredes laterais
-    if x_cor > (width - 15) or x_cor < 15:
-        x_change = x_change * -1
+        pygame.quit()
+        sys.exit()
 
-    # Colisão com topo
-    if y_cor > (height - 15) or y_cor < 15:
-        y_change = y_change * -1
 
-    # Colisão da bola com a barra
-    if circle.colliderect(rect):
-        y_change = y_change * -1
-
-    # Bola passou da barra
-    if y_cor > 460:
-        floor_collision = True
-        y_change = y_change * -1
-
-    clock.tick(fps)
-    # Mostrar tempos na tela
-    # Mostrar tempos na tela, evitando sobreposição
-    time_text = font.render(f"Tempo: {sec}s", True, text_color)
-    best_text = font.render(f"Melhor tempo: {melhor_tempo}s", True, text_color)
-
-    time_rect = time_text.get_rect(topleft=(10, 10))
-    display_window.blit(time_text, time_rect)
-
-    best_pos_y = time_rect.bottom + 5
-    best_rect = best_text.get_rect(topleft=(10, best_pos_y))
-    display_window.blit(best_text, best_rect)
-
-    pygame.display.update()
-    pygame.display.flip()
-    time.sleep(0.015)
+if __name__ == "__main__":
+    game = PongGame()
+    game.loop_principal()
