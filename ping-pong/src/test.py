@@ -82,6 +82,8 @@ class PongGame:
         self.green = (0, 200, 200)
         self.black = (0, 0, 0)
         self.white = (255, 255, 255)
+        self.frames_no_canto = 0
+
 
         if not self.headless:
             pygame.init()
@@ -148,23 +150,41 @@ class PongGame:
 
 
     def move_player(self):
-        decisao = self.rede.feedforward(self.rect_x, self.x_cor, self.y_cor, self.x_change, self.y_change)
+        decisao = self.rede.feedforwarddecisao = self.rede.feedforward(
+            self.rect_x,      # YRaquete
+            self.x_cor,       # XBolinha
+            self.y_cor,       # YBola
+            self.x_change,    # VelocidadeX
+            self.y_change     # VelocidadeY
+        )
+
         movimento = (decisao - 0.5) * 10  # movimento entre -5 e 5
 
         entrada = [self.rect_x, self.x_cor, self.y_cor, self.x_change, self.y_change, -1]
         self.historico.append({'entrada': entrada, 'decisao': decisao})
-        # Remove a gravação aqui para evitar salvar a cada frame
 
-        # No canto esquerdo, impede movimento para esquerda
+        # Controle de frames no canto e força movimento depois de um tempo parado
+        if self.rect_x <= 5:
+            self.frames_no_canto += 1
+            if self.frames_no_canto > 10:
+                movimento = 2  # força mover para direita
+        elif self.rect_x >= self.width - 105:
+            self.frames_no_canto += 1
+            if self.frames_no_canto > 10:
+                movimento = -2  # força mover para esquerda
+        else:
+            self.frames_no_canto = 0
+
+        # Limitar para não sair da tela
         if self.rect_x <= 0 and movimento < 0:
             movimento = 0
-
-        # No canto direito, impede movimento para direita
         elif self.rect_x >= self.width - 100 and movimento > 0:
             movimento = 0
 
         self.rect_x += movimento
         self.rect_x = max(0, min(self.rect_x, self.width - 100))
+
+        print(f"Posição raquete: {self.rect_x}, Frames no canto: {self.frames_no_canto}, Movimento: {movimento}")
 
 
 
@@ -228,13 +248,21 @@ class PongGame:
 
         # Treina com todo o histórico acumulado
         for registro in self.historico:
-            entradas = registro['entrada']      # lista com 6 elementos: [rect_x, x_cor, y_cor, x_change, y_change, bias]
-            decisao = registro['decisao']       # valor da decisão da rede
-
+            entradas = registro['entrada']
+            decisao = registro['decisao']
             movimento = decisao
 
-            # Cálculo do erro - você pode ajustar essa fórmula conforme a lógica desejada
-            erro = (entradas[0] + movimento - entradas[2]) / 100
+            penalidade_canto = 0
+            if self.frames_no_canto > 30:
+                penalidade_canto = 1.0  # penalidade maior para forçar sair do canto
+
+            erro = (entradas[0] + movimento - entradas[2]) / 100 + penalidade_canto
+
+            self.rede.feedforward(*entradas)
+            self.rede.atualizaPesos(erro, entradas)
+
+        
+
 
             # Chama feedforward com todas as 6 entradas
             self.rede.feedforward(*entradas)
@@ -304,3 +332,5 @@ class PongGame:
 if __name__ == "__main__":
     game = PongGame()
     game.loop_principal()
+    
+
