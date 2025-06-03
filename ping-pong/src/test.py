@@ -6,11 +6,15 @@ from random import uniform
 import time
 import csv
 import os
+import threading
+
+
+
 class RedeNeural:
     def __init__(self):
         # Inicializa pesos da rede como atributos do objeto
-        self.pesosPrimeiroNeuronioCamadaEntrada = np.array([uniform(-1, 1) for _ in range(4)])
-        self.pesosSegundoNeuronioCamadaEntrada = np.array([uniform(-1, 1) for _ in range(4)])
+        self.pesosPrimeiroNeuronioCamadaEntrada = np.array([uniform(-1, 1) for _ in range(6)])
+        self.pesosSegundoNeuronioCamadaEntrada = np.array([uniform(-1, 1) for _ in range(6)])
 
         self.pesosPrimeiroNeuronioCamadaOculta = np.array([uniform(-1, 1) for _ in range(2)])
         self.pesosSegundoNeuronioCamadaOculta = np.array([uniform(-1, 1) for _ in range(2)])
@@ -19,8 +23,8 @@ class RedeNeural:
 
         self.resultado = 0
 
-    def feedforward(self, YRaquete, XBolinha, YBola, bias=-1):
-        entradas = np.array([YRaquete, XBolinha, YBola, bias])
+    def feedforward(self, YRaquete, XBolinha, YBola, VelocidadeX, VelocidadeY, bias=-1):
+        entradas = np.array([YRaquete, XBolinha, YBola, VelocidadeX, VelocidadeY, bias])
 
         self.saidaPrimeiroNeuronioCamadaEntrada = round(
             np.tanh(np.sum(entradas * self.pesosPrimeiroNeuronioCamadaEntrada)), 6)
@@ -29,52 +33,71 @@ class RedeNeural:
             np.tanh(np.sum(entradas * self.pesosSegundoNeuronioCamadaEntrada)), 6)
 
         self.saidaPrimeiroNeuronioCamadaOculta = round(
-            np.tanh(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaEntrada, self.saidaPrimeiroNeuronioCamadaEntrada]) * self.pesosPrimeiroNeuronioCamadaOculta)),6)
+            np.tanh(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaEntrada, self.saidaSegundoNeuronioCamadaEntrada]) * self.pesosPrimeiroNeuronioCamadaOculta)), 6)
 
         self.saidaSegundoNeuronioCamadaOculta = round(
-            np.tanh(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaEntrada, self.saidaSegundoNeuronioCamadaEntrada]) * self.saidaSegundoNeuronioCamadaEntrada)),6)
+            np.tanh(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaEntrada, self.saidaSegundoNeuronioCamadaEntrada]) * self.pesosSegundoNeuronioCamadaOculta)), 6)
 
         self.resultado = round(self.sigmoid(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaOculta, self.saidaSegundoNeuronioCamadaOculta]) * self.pesosNeuronioDeSaida)), 6)
 
         return self.resultado
 
+
     def sigmoid(self, x):
         return 1 / (1 + np.exp(-x))
 
-    def atualizaPesos(self, erro, alpha=0.01):
+    def atualizaPesos(self, erro, entradas, alpha=0.01):
+    # Atualiza pesos da camada de saída (2 pesos)
         for i in range(len(self.pesosNeuronioDeSaida)):
-            entrada = self.saidaPrimeiroNeuronioCamadaOculta if i == 0 else self.saidaSegundoNeuronioCamadaOculta
-            self.pesosNeuronioDeSaida[i] += alpha * entrada * erro
+            entrada_oculta = self.saidaPrimeiroNeuronioCamadaOculta if i == 0 else self.saidaSegundoNeuronioCamadaOculta
+            self.pesosNeuronioDeSaida[i] += alpha * entrada_oculta * erro
 
+        # Atualiza pesos da primeira camada oculta (2 pesos)
         for i in range(len(self.pesosPrimeiroNeuronioCamadaOculta)):
-            entrada1 = self.saidaPrimeiroNeuronioCamadaEntrada if i == 0 else self.saidaSegundoNeuronioCamadaEntrada
-            self.pesosPrimeiroNeuronioCamadaOculta[i] += alpha * entrada1 * erro
+            entrada_entrada = self.saidaPrimeiroNeuronioCamadaEntrada if i == 0 else self.saidaSegundoNeuronioCamadaEntrada
+            self.pesosPrimeiroNeuronioCamadaOculta[i] += alpha * entrada_entrada * erro
 
+        # Atualiza pesos da segunda camada oculta (2 pesos)
         for i in range(len(self.pesosSegundoNeuronioCamadaOculta)):
-            entrada2 = self.saidaPrimeiroNeuronioCamadaEntrada if i == 0 else self.saidaSegundoNeuronioCamadaEntrada
-            self.pesosSegundoNeuronioCamadaOculta[i] += alpha * entrada2 * erro
+            entrada_entrada = self.saidaPrimeiroNeuronioCamadaEntrada if i == 0 else self.saidaSegundoNeuronioCamadaEntrada
+            self.pesosSegundoNeuronioCamadaOculta[i] += alpha * entrada_entrada * erro
 
+        # Atualiza pesos da camada de entrada (agora 6 pesos)
         for i in range(len(self.pesosPrimeiroNeuronioCamadaEntrada)):
-            self.pesosPrimeiroNeuronioCamadaEntrada[i] += alpha * erro
+            self.pesosPrimeiroNeuronioCamadaEntrada[i] += alpha * entradas[i] * erro
 
         for i in range(len(self.pesosSegundoNeuronioCamadaEntrada)):
-            self.pesosSegundoNeuronioCamadaEntrada[i] += alpha * erro
+            self.pesosSegundoNeuronioCamadaEntrada[i] += alpha * entradas[i] * erro
+
 
 
 class PongGame:
-    def __init__(self, width=640, height=480):
-        pygame.init()
+    def __init__(self, headless=False, id_thread=0, width=640, height=480):
+        self.headless = headless
+        self.id_thread = id_thread
         self.width = width
         self.height = height
-        self.display = pygame.display.set_mode((width, height))
-        pygame.display.set_caption("Ping Pong")
-        self.clock = pygame.time.Clock()
 
+        # Inicializar cores SEMPRE, pois são usadas na lógica também
         self.green = (0, 200, 200)
         self.black = (0, 0, 0)
         self.white = (255, 255, 255)
-        self.font = pygame.font.Font(None, 30)
 
+        if not self.headless:
+            pygame.init()
+            self.display = pygame.display.set_mode((width, height))
+            pygame.display.set_caption("Ping Pong")
+            self.clock = pygame.time.Clock()
+            self.font = pygame.font.Font(None, 30)
+        else:
+            self.display = None
+            self.clock = None
+            self.font = None
+
+        # resto da inicialização...
+
+        # resto da inicialização (variáveis, rede neural, histórico)
+        # exemplo:
         self.rect_x = 272
         self.rect_y = 470
         self.x_cor = random.randint(15, width - 15)
@@ -85,12 +108,11 @@ class PongGame:
         self.floor_collision = False
         self.win = False
         self.sec = 0
-        self.t = pygame.time.get_ticks()
+        self.t = pygame.time.get_ticks() if not headless else 0
 
         self.melhor_tempo = 0
         self.partidas_jogadas = 0
 
-        # Inicializa rede neural
         self.rede = RedeNeural()
         self.melhores_pesos = [
             self.rede.pesosPrimeiroNeuronioCamadaEntrada.copy(),
@@ -100,34 +122,38 @@ class PongGame:
             self.rede.pesosNeuronioDeSaida.copy()
         ]
 
-        # Aqui criamos a lista para armazenar histórico (entradas, decisões)
         self.historico = self.carregar_historico_csv()
+
     def carregar_historico_csv(self):
         historico = []
         if os.path.exists('historico.csv'):
             with open('historico.csv', newline='') as csvfile:
                 reader = csv.reader(csvfile)
                 for row in reader:
-                    # Cada linha: [rect_x, x_cor, y_cor, bias, decisao]
-                    if len(row) == 5:
-                        entrada = list(map(float, row[:4]))
-                        decisao = float(row[4])
+                    # Cada linha: [rect_x, x_cor, y_cor, x_change, y_change, bias, decisao]
+                    if len(row) == 7:
+                        entrada = list(map(float, row[:6]))
+                        decisao = float(row[6])
                         historico.append({'entrada': entrada, 'decisao': decisao})
         return historico
+
+        return historico
     def salvar_historico_csv(self):
-        with open('historico.csv', 'w', newline='') as csvfile:
+        filename = f"historico_{self.id_thread}.csv" if self.headless else "historico.csv"
+        with open(filename, 'w', newline='') as csvfile:
             writer = csv.writer(csvfile)
             for registro in self.historico:
                 linha = registro['entrada'] + [registro['decisao']]
                 writer.writerow(linha)
 
+
     def move_player(self):
-        decisao = self.rede.feedforward(self.rect_x, self.x_cor, self.y_cor)
+        decisao = self.rede.feedforward(self.rect_x, self.x_cor, self.y_cor, self.x_change, self.y_change)
         movimento = (decisao - 0.5) * 10  # movimento entre -5 e 5
 
-        entrada = [self.rect_x, self.x_cor, self.y_cor, -1]
+        entrada = [self.rect_x, self.x_cor, self.y_cor, self.x_change, self.y_change, -1]
         self.historico.append({'entrada': entrada, 'decisao': decisao})
-        self.salvar_historico_csv()
+        # Remove a gravação aqui para evitar salvar a cada frame
 
         # No canto esquerdo, impede movimento para esquerda
         if self.rect_x <= 0 and movimento < 0:
@@ -139,6 +165,7 @@ class PongGame:
 
         self.rect_x += movimento
         self.rect_x = max(0, min(self.rect_x, self.width - 100))
+
 
 
 
@@ -201,21 +228,25 @@ class PongGame:
 
         # Treina com todo o histórico acumulado
         for registro in self.historico:
-            entrada = registro['entrada']
-            decisao = registro['decisao']
+            entradas = registro['entrada']      # lista com 6 elementos: [rect_x, x_cor, y_cor, x_change, y_change, bias]
+            decisao = registro['decisao']       # valor da decisão da rede
 
-            entrada_raquete = entrada[0]
-            entrada_bola_x = entrada[1]
-            entrada_bola_y = entrada[2]
             movimento = decisao
 
-            erro = (entrada_raquete + movimento - entrada_bola_y) / 100
-            self.rede.feedforward(entrada_raquete, entrada_bola_x, entrada_bola_y)
-            self.rede.atualizaPesos(erro)
+            # Cálculo do erro - você pode ajustar essa fórmula conforme a lógica desejada
+            erro = (entradas[0] + movimento - entradas[2]) / 100
 
+            # Chama feedforward com todas as 6 entradas
+            self.rede.feedforward(*entradas)
+
+            # Atualiza os pesos passando o erro e as entradas completas
+            self.rede.atualizaPesos(erro, entradas)
+
+        self.salvar_historico_csv()
         self.historico.clear()
         self.sec = 0
         self.floor_collision = False
+
 
     def desenhar(self):
         self.display.fill(self.black)
