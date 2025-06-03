@@ -150,41 +150,42 @@ class PongGame:
 
 
     def move_player(self):
-        decisao = self.rede.feedforwarddecisao = self.rede.feedforward(
-            self.rect_x,      # YRaquete
-            self.x_cor,       # XBolinha
-            self.y_cor,       # YBola
-            self.x_change,    # VelocidadeX
-            self.y_change     # VelocidadeY
+        decisao = self.rede.feedforward(
+            self.rect_x,
+            self.x_cor,
+            self.y_cor,
+            self.x_change,
+            self.y_change
         )
-
         movimento = (decisao - 0.5) * 10  # movimento entre -5 e 5
 
         entrada = [self.rect_x, self.x_cor, self.y_cor, self.x_change, self.y_change, -1]
         self.historico.append({'entrada': entrada, 'decisao': decisao})
 
-        # Controle de frames no canto e força movimento depois de um tempo parado
-        if self.rect_x <= 5:
+        # Força sair do canto com movimento fixo, sem deixar sobrescrever
+        if self.rect_x <= 1:
             self.frames_no_canto += 1
-            if self.frames_no_canto > 10:
-                movimento = 2  # força mover para direita
-        elif self.rect_x >= self.width - 105:
+            movimento = abs(movimento) if movimento <= 0 else movimento  # força positivo
+            movimento = max(movimento, 1)  # no mínimo 1 para ir devagar para direita
+        elif self.rect_x >= self.width - 101:
             self.frames_no_canto += 1
-            if self.frames_no_canto > 10:
-                movimento = -2  # força mover para esquerda
+            movimento = -abs(movimento) if movimento >= 0 else movimento  # força negativo
+            movimento = min(movimento, -1)  # no máximo -1 para ir devagar para esquerda
         else:
             self.frames_no_canto = 0
 
         # Limitar para não sair da tela
-        if self.rect_x <= 0 and movimento < 0:
-            movimento = 0
-        elif self.rect_x >= self.width - 100 and movimento > 0:
-            movimento = 0
+        if self.rect_x + movimento < 0:
+            movimento = -self.rect_x
+        elif self.rect_x + movimento > self.width - 100:
+            movimento = (self.width - 100) - self.rect_x
 
         self.rect_x += movimento
-        self.rect_x = max(0, min(self.rect_x, self.width - 100))
 
-        print(f"Posição raquete: {self.rect_x}, Frames no canto: {self.frames_no_canto}, Movimento: {movimento}")
+        print(f"Posição raquete: {self.rect_x:.2f}, Frames no canto: {self.frames_no_canto}, Movimento: {movimento:.2f}")
+
+
+
 
 
 
