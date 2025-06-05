@@ -7,6 +7,7 @@ import time
 import csv
 import os
 import threading
+import matplotlib.pyplot as plt
 
 
 
@@ -23,8 +24,11 @@ class RedeNeural:
 
         self.resultado = 0
 
+    # Antes de alimentar a rede, normalize os valores
     def feedforward(self, YRaquete, XBolinha, YBola, VelocidadeX, VelocidadeY, bias=-1):
         entradas = np.array([YRaquete, XBolinha, YBola, VelocidadeX, VelocidadeY, bias])
+    # Resto da função...
+
 
         self.saidaPrimeiroNeuronioCamadaEntrada = round(
             np.tanh(np.sum(entradas * self.pesosPrimeiroNeuronioCamadaEntrada)), 6)
@@ -83,7 +87,8 @@ class PongGame:
         self.black = (0, 0, 0)
         self.white = (255, 255, 255)
         self.frames_no_canto = 0
-
+        self.erros = []  # Para salvar o erro durante o treinamento
+        self.pesos_hist = []  # Para armazenar os pesos ao longo do tempo
 
         if not self.headless:
             pygame.init()
@@ -96,10 +101,8 @@ class PongGame:
             self.clock = None
             self.font = None
 
-        # resto da inicialização...
+        # resto da inicialização... 
 
-        # resto da inicialização (variáveis, rede neural, histórico)
-        # exemplo:
         self.rect_x = 272
         self.rect_y = 470
         self.x_cor = random.randint(15, width - 15)
@@ -126,20 +129,40 @@ class PongGame:
 
         self.historico = self.carregar_historico_csv()
 
+    def plotar_graficos(self):
+        # Gráfico de erro ao longo do tempo
+        plt.figure(figsize=(10, 5))
+        plt.plot(self.erros)
+        plt.title("Evolução do Erro")
+        plt.xlabel("Epoch")
+        plt.ylabel("Erro")
+        plt.grid(True)
+        plt.savefig("grafico_erro.png")  # Salva o gráfico de erro
+        plt.close()
+
+        # Gráfico de pesos da rede neural ao longo do tempo
+        pesos_media = [np.mean(np.array(pesos)) for pesos in self.pesos_hist]
+        plt.figure(figsize=(10, 5))
+        plt.plot(pesos_media)
+        plt.title("Evolução dos Pesos")
+        plt.xlabel("Epoch")
+        plt.ylabel("Média dos Pesos")
+        plt.grid(True)
+        plt.savefig("grafico_pesos.png")  # Salva o gráfico de pesos
+        plt.close()
+
     def carregar_historico_csv(self):
         historico = []
         if os.path.exists('historico.csv'):
             with open('historico.csv', newline='') as csvfile:
                 reader = csv.reader(csvfile)
                 for row in reader:
-                    # Cada linha: [rect_x, x_cor, y_cor, x_change, y_change, bias, decisao]
                     if len(row) == 7:
                         entrada = list(map(float, row[:6]))
                         decisao = float(row[6])
                         historico.append({'entrada': entrada, 'decisao': decisao})
         return historico
 
-        return historico
     def salvar_historico_csv(self):
         filename = f"historico_{self.id_thread}.csv" if self.headless else "historico.csv"
         with open(filename, 'w', newline='') as csvfile:
@@ -148,33 +171,34 @@ class PongGame:
                 linha = registro['entrada'] + [registro['decisao']]
                 writer.writerow(linha)
 
-
     def move_player(self):
+        YRaquete_norm = self.rect_x / self.width
+        XBolinha_norm = self.x_cor / self.width
+        YBola_norm = self.y_cor / self.height
+        VelocidadeX_norm = self.x_change / 10
+        VelocidadeY_norm = self.y_change / 10
+        
         decisao = self.rede.feedforward(
-            self.rect_x,
-            self.x_cor,
-            self.y_cor,
-            self.x_change,
-            self.y_change
+            YRaquete_norm,
+            XBolinha_norm,
+            YBola_norm,
+            VelocidadeX_norm,
+            VelocidadeY_norm
         )
         movimento = (decisao - 0.5) * 10  # movimento entre -5 e 5
 
         entrada = [self.rect_x, self.x_cor, self.y_cor, self.x_change, self.y_change, -1]
         self.historico.append({'entrada': entrada, 'decisao': decisao})
 
-        # Força sair do canto com movimento fixo, sem deixar sobrescrever
         if self.rect_x <= 1:
             self.frames_no_canto += 1
-            movimento = abs(movimento) if movimento <= 0 else movimento  # força positivo
-            movimento = max(movimento, 1)  # no mínimo 1 para ir devagar para direita
+            movimento = 5  # Valor fixo para direita
         elif self.rect_x >= self.width - 101:
             self.frames_no_canto += 1
-            movimento = -abs(movimento) if movimento >= 0 else movimento  # força negativo
-            movimento = min(movimento, -1)  # no máximo -1 para ir devagar para esquerda
+            movimento = -5  # Valor fixo para esquerda
         else:
             self.frames_no_canto = 0
 
-        # Limitar para não sair da tela
         if self.rect_x + movimento < 0:
             movimento = -self.rect_x
         elif self.rect_x + movimento > self.width - 100:
@@ -182,46 +206,28 @@ class PongGame:
 
         self.rect_x += movimento
 
-        print(f"Posição raquete: {self.rect_x:.2f}, Frames no canto: {self.frames_no_canto}, Movimento: {movimento:.2f}")
-
-
-
-
-
-
-
-
     def atualizar_bola(self):
         self.x_cor += self.x_change
         self.y_cor += self.y_change
 
-        # Limita a bola dentro dos limites da janela, para evitar coordenadas inválidas
         self.x_cor = max(15, min(self.x_cor, self.width - 15))
         self.y_cor = max(15, min(self.y_cor, self.height - 15))
 
-        # Colisão com paredes laterais
         if self.x_cor == 15 or self.x_cor == self.width - 15:
             self.x_change *= -1
 
-        # Colisão com topo
         if self.y_cor == 15:
             self.y_change *= -1
 
-        # Retângulo da barra (raquete)
         barra_rect = pygame.Rect(self.rect_x, self.rect_y, 100, 100)
-
-        # Retângulo da bola: centro na posição, tamanho 30x30
         bola_rect = pygame.Rect(int(self.x_cor - 15), int(self.y_cor - 15), 30, 30)
 
-        # Colisão da bola com a barra
         if bola_rect.colliderect(barra_rect):
             self.y_change *= -1
 
-        # Bola passou da barra (chão)
         if self.y_cor > self.height - 20:
             self.floor_collision = True
             self.y_change *= -1
-
 
     def treinar_rede(self):
         fitness = self.sec
@@ -229,7 +235,6 @@ class PongGame:
 
         if fitness >= self.melhor_tempo:
             self.melhor_tempo = fitness
-            # Salva pesos atuais
             self.melhores_pesos = [
                 self.rede.pesosPrimeiroNeuronioCamadaEntrada.copy(),
                 self.rede.pesosSegundoNeuronioCamadaEntrada.copy(),
@@ -238,7 +243,6 @@ class PongGame:
                 self.rede.pesosNeuronioDeSaida.copy()
             ]
         else:
-            # Carrega melhores pesos
             (
                 self.rede.pesosPrimeiroNeuronioCamadaEntrada,
                 self.rede.pesosSegundoNeuronioCamadaEntrada,
@@ -247,53 +251,36 @@ class PongGame:
                 self.rede.pesosNeuronioDeSaida
             ) = self.melhores_pesos
 
-        # Treina com todo o histórico acumulado
         for registro in self.historico:
             entradas = registro['entrada']
             decisao = registro['decisao']
             movimento = decisao
 
-            penalidade_canto = 0
-            if self.frames_no_canto > 30:
-                penalidade_canto = 1.0  # penalidade maior para forçar sair do canto
-
-            erro = (entradas[0] + movimento - entradas[2]) / 100 + penalidade_canto
+            erro = (entradas[0] + movimento - entradas[2]) / 100  # Ajuste do erro
 
             self.rede.feedforward(*entradas)
             self.rede.atualizaPesos(erro, entradas)
 
-        
-
-
-            # Chama feedforward com todas as 6 entradas
-            self.rede.feedforward(*entradas)
-
-            # Atualiza os pesos passando o erro e as entradas completas
-            self.rede.atualizaPesos(erro, entradas)
+            self.erros.append(erro)
+            self.pesos_hist.append(self.rede.pesosNeuronioDeSaida.copy())
 
         self.salvar_historico_csv()
         self.historico.clear()
         self.sec = 0
         self.floor_collision = False
 
-
     def desenhar(self):
         self.display.fill(self.black)
 
-        # Texto tempo
         time_text = self.font.render(f"Tempo: {self.sec}s", True, self.green)
         self.display.blit(time_text, (10, 10))
 
-        # Bola
         pygame.draw.circle(self.display, self.white, (int(self.x_cor), int(self.y_cor)), 15)
-
-        # Barra jogador
         pygame.draw.rect(self.display, self.white, (self.rect_x, self.rect_y, 100, 100))
 
     def loop_principal(self):
         running = True
         while running:
-            # Eventos
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
@@ -301,14 +288,9 @@ class PongGame:
                     if event.key == pygame.K_ESCAPE:
                         running = False
 
-            # Atualiza tempo
             if pygame.time.get_ticks() - self.t >= 1000:
                 self.sec += 1
                 self.t = pygame.time.get_ticks()
-                if self.sec >= 60:
-                    self.win = True
-                if self.floor_collision:
-                    self.sec -= 1  # Não conta se perdeu
 
             self.move_player()
             self.atualizar_bola()
@@ -323,15 +305,15 @@ class PongGame:
                 rect = win_text.get_rect(center=(self.width // 2, self.height // 2))
                 self.display.blit(win_text, rect)
 
+                # Plotar gráficos
+                self.plotar_graficos()
+
             pygame.display.flip()
             self.clock.tick(25)
 
         pygame.quit()
         sys.exit()
 
-
 if __name__ == "__main__":
     game = PongGame()
     game.loop_principal()
-    
-
