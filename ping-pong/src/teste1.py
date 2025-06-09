@@ -25,25 +25,24 @@ class RedeNeural:
     def feedforward(self, YRaquete, XBolinha, YBola, VelocidadeX, VelocidadeY, bias=-1):
         entradas = np.array([YRaquete, XBolinha, YBola, VelocidadeX, VelocidadeY, bias])
 
-        self.saidaPrimeiroNeuronioCamadaEntrada = round(np.tanh(np.sum(entradas * self.pesosPrimeiroNeuronioCamadaEntrada)), 6)
-        self.saidaSegundoNeuronioCamadaEntrada = round(np.tanh(np.sum(entradas * self.pesosSegundoNeuronioCamadaEntrada)), 6)
-        self.saidaPrimeiroNeuronioCamadaOculta = round(np.tanh(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaEntrada,
-                                                                                 self.saidaSegundoNeuronioCamadaEntrada]) * self.pesosPrimeiroNeuronioCamadaOculta)), 6)
-        self.saidaSegundoNeuronioCamadaOculta = round(np.tanh(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaEntrada,
-                                                                                 self.saidaSegundoNeuronioCamadaEntrada]) * self.pesosSegundoNeuronioCamadaOculta)), 6)
+        self.saidaPrimeiroNeuronioCamadaEntrada = np.tanh(np.sum(entradas * self.pesosPrimeiroNeuronioCamadaEntrada))
+        self.saidaSegundoNeuronioCamadaEntrada = np.tanh(np.sum(entradas * self.pesosSegundoNeuronioCamadaEntrada))
+        self.saidaPrimeiroNeuronioCamadaOculta = np.tanh(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaEntrada,
+                                                                                 self.saidaSegundoNeuronioCamadaEntrada]) * self.pesosPrimeiroNeuronioCamadaOculta))
+        self.saidaSegundoNeuronioCamadaOculta = np.tanh(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaEntrada,
+                                                                                 self.saidaSegundoNeuronioCamadaEntrada]) * self.pesosSegundoNeuronioCamadaOculta))
 
-        self.resultado = round(self.sigmoid(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaOculta,
-                                                            self.saidaSegundoNeuronioCamadaOculta]) * self.pesosNeuronioDeSaida)), 6)
+        self.resultado = self.sigmoid(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaOculta,
+                                                            self.saidaSegundoNeuronioCamadaOculta]) * self.pesosNeuronioDeSaida))
 
         return self.resultado
 
     def sigmoid(self, x):
-    # Limitar os valores de entrada para evitar overflow
-        x = np.clip(x, -500, 500)  # Ajuste os limites conforme necessário
+        x = np.clip(x, -500, 500)  # Para evitar overflow
         return 1 / (1 + np.exp(-x))
 
-
     def atualizaPesos(self, erro, entradas, alpha=0.5):
+        # Atualiza os pesos através de gradiente descendente
         for i in range(len(self.pesosNeuronioDeSaida)):
             entrada_oculta = self.saidaPrimeiroNeuronioCamadaOculta if i == 0 else self.saidaSegundoNeuronioCamadaOculta
             self.pesosNeuronioDeSaida[i] += alpha * entrada_oculta * erro
@@ -61,6 +60,47 @@ class RedeNeural:
 
         for i in range(len(self.pesosSegundoNeuronioCamadaEntrada)):
             self.pesosSegundoNeuronioCamadaEntrada[i] += alpha * entradas[i] * erro
+
+    def treino(self, max_iter=1000):
+        melhor_erro = float('inf')  # Defina um valor alto no início para encontrar o mínimo
+        melhor_pesos = None
+
+        for i in range(max_iter):
+            erro_total = 0
+            for entrada in self.historico:
+                # Obter entrada e saída desejada
+                entradas = entrada['entrada']
+                decisao = entrada['decisao']
+                movimento = decisao  # A decisão é o valor de movimento desejado
+
+                # Calcular erro (exemplo simples: valor de erro absoluto)
+                erro = np.abs(entradas[0] - movimento)  # Erro de exemplo (ajuste conforme necessário)
+                erro_total += erro
+
+                # Atualizar pesos
+                self.rede.feedforward(*entradas)
+                self.rede.atualizaPesos(erro, entradas)
+
+            # Salvar os melhores pesos
+            if erro_total < melhor_erro:
+                melhor_erro = erro_total
+                melhor_pesos = [peso.copy() for peso in [self.rede.pesosPrimeiroNeuronioCamadaEntrada,
+                                                        self.rede.pesosSegundoNeuronioCamadaEntrada,
+                                                        self.rede.pesosPrimeiroNeuronioCamadaOculta,
+                                                        self.rede.pesosSegundoNeuronioCamadaOculta,
+                                                        self.rede.pesosNeuronioDeSaida]]
+
+            print(f"Iteração {i + 1}, Erro Total: {erro_total}")
+
+        # Após o treinamento, restaurar os melhores pesos encontrados
+        if melhor_pesos:
+            self.rede.pesosPrimeiroNeuronioCamadaEntrada, \
+            self.rede.pesosSegundoNeuronioCamadaEntrada, \
+            self.rede.pesosPrimeiroNeuronioCamadaOculta, \
+            self.rede.pesosSegundoNeuronioCamadaOculta, \
+            self.rede.pesosNeuronioDeSaida = melhor_pesos
+
+
 
 
 class PongGame:
@@ -168,7 +208,7 @@ class PongGame:
         YBola_norm = self.y_cor / self.height
         VelocidadeX_norm = self.x_change / 10
         VelocidadeY_norm = self.y_change / 10
-
+        
         decisao = self.rede.feedforward(
             YRaquete_norm,
             XBolinha_norm,
@@ -176,41 +216,27 @@ class PongGame:
             VelocidadeX_norm,
             VelocidadeY_norm
         )
-        movimento = (decisao - 0.5) * 10  # Movimento entre -5 e 5
-
-        # Ajustando a parte dos cantos para que o movimento não pare
-        if self.rect_x <= 1:
-            self.frames_no_canto += 1
-            if self.frames_no_canto > 1:
-                movimento = 1.0  # Ajusta o movimento para evitar ficar em 0
-        elif self.rect_x >= self.width - 101:
-            self.frames_no_canto += 1
-            if self.frames_no_canto > 1:
-                movimento = -1.0  # Ajusta o movimento para evitar ficar em 0
-        else:
-            self.frames_no_canto = 0  # Reseta o contador quando não está no canto
-
-        # Evitar que o movimento seja 0 por várias iterações
-        if movimento == 0:
-            movimento = 1.0 if self.rect_x < self.width / 2 else -1.0  # Impulso para evitar ficar parado
-
-        # Evitar movimentos alternados contínuos (sequência +- ou -+)
-        if hasattr(self, 'ultimo_movimento') and movimento * self.ultimo_movimento > 0:
-            movimento = -movimento  # Inverte o movimento se for igual ao anterior
-
-        # Garante que a raquete não ultrapasse os limites da tela
-        if self.rect_x + movimento <= 0:
-            movimento = -self.rect_x  # Garante que a raquete não ultrapasse a borda esquerda
-        elif self.rect_x + movimento > self.width - 100:
-            movimento = (self.width - 100) - self.rect_x  # Garante que a raquete não ultrapasse a borda direita
-
-        self.rect_x += movimento  # Aplica o movimento na posição
-
-        # Armazenar o movimento atual para evitar repetições no próximo ciclo
-        self.ultimo_movimento = movimento
+        movimento = (decisao - 0.5) * 10  # movimento entre -5 e 5
 
         entrada = [self.rect_x, self.x_cor, self.y_cor, self.x_change, self.y_change, -1]
         self.historico.append({'entrada': entrada, 'decisao': decisao})
+
+        if self.rect_x <= 1:
+            self.frames_no_canto += 1
+            movimento = 5  # Valor fixo para direita
+        elif self.rect_x >= self.width - 101:
+            self.frames_no_canto += 1
+            movimento = -5  # Valor fixo para esquerda
+        else:
+            self.frames_no_canto = 0
+
+        if self.rect_x + movimento < 0:
+            movimento = -self.rect_x
+        elif self.rect_x + movimento > self.width - 100:
+            movimento = (self.width - 100) - self.rect_x
+
+        self.rect_x += movimento
+
 
     def atualizar_bola(self):
         self.x_cor += self.x_change
@@ -334,8 +360,22 @@ class PongGame:
 
         pygame.quit()
         sys.exit()
+# Função que reinicia o jogo e a rede neural
+def treinar_rede_multiplicadas_vezes(numero_de_treinamentos=10):
+    for i in range(numero_de_treinamentos):
+        print(f"Treinamento {i+1}/{numero_de_treinamentos}...")
+        
+        # Inicializa o jogo e a rede neural
+        game = PongGame()  # Crie ou utilize a classe do seu jogo
+        game.loop_principal()  # Roda o jogo, treinando e atualizando os pesos durante a execução
+
+        # Aqui você pode adicionar condições para salvar os melhores desempenhos, se necessário
+        # Exemplo: Salve o erro ou pesos para cada execução
+        print(f"Treinamento {i+1} finalizado. Pesos atualizados!")
+        
+# Chame a função para treinar múltiplas vezes
+treinar_rede_multiplicadas_vezes(5)  # Treinar 5 vezes, por exemplo
 
 
 if __name__ == "__main__":
-    game = PongGame()
-    game.loop_principal()
+    treinar_rede_multiplicadas_vezes(5)  # Executa 5 treinamentos em paralelo
