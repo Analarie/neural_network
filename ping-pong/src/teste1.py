@@ -49,7 +49,7 @@ class RedeNeural:
         x = np.clip(x, -500, 500)  # Para evitar overflow
         return 1 / (1 + np.exp(-x))
 
-    def atualizaPesos(self, erro, entradas, alpha=0.5):
+    def atualizaPesos(self, erro, entradas, alpha=0.1):
         # Atualiza os pesos através de gradiente descendente
         for i in range(len(self.pesosNeuronioDeSaida)):
             entrada_oculta = self.saidaPrimeiroNeuronioCamadaOculta if i == 0 else self.saidaSegundoNeuronioCamadaOculta

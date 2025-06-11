@@ -5,6 +5,8 @@ import numpy as np
 import time
 import csv
 import os
+import matplotlib
+matplotlib.use('Agg')  # Usar o backend 'Agg' para gerar imagens sem interface gráfica
 import matplotlib.pyplot as plt
 from random import uniform
 
@@ -136,6 +138,7 @@ class PongGame:
             plt.ylabel("Erro")
             plt.grid(True)
             plt.savefig("grafico_erro.png")  # Salva o gráfico de erro
+            print("Gráfico de erro salvo como grafico_erro.png")
             plt.show()  # Exibe o gráfico imediatamente
             plt.close()
 
@@ -149,8 +152,10 @@ class PongGame:
             plt.ylabel("Média dos Pesos")
             plt.grid(True)
             plt.savefig("grafico_pesos.png")  # Salva o gráfico de pesos
+            print("Gráfico de pesos salvo como grafico_pesos.png")
             plt.show()  # Exibe o gráfico imediatamente
             plt.close()
+
 
     def salvar_historico_csv(self):
         filename = f"historico_{self.id_thread}.csv" if self.headless else "historico.csv"
@@ -252,7 +257,20 @@ class PongGame:
         self.frames_no_canto = 0
         self.floor_collision = False
         self.sec = 0
+        self.salvar_historico_csv()  # Adicionei aqui para salvar o histórico acumulado
         self.historico.clear()  # Limpar o histórico para o próximo treinamento
+    def plotar_graficos(self):
+        # Gráfico de erro ao longo do tempo
+        if len(self.erros) > 0:
+            plt.figure(figsize=(10, 5))  # Define o tamanho da figura
+            plt.plot(self.erros)  # Plota os erros armazenados no histórico
+            plt.title("Evolução do Erro")  # Título do gráfico
+            plt.xlabel("Epoch")  # Rótulo do eixo X
+            plt.ylabel("Erro")  # Rótulo do eixo Y
+            plt.grid(True)  # Adiciona uma grade ao gráfico
+            plt.savefig("grafico_erro.png")  # Salva o gráfico como imagem
+            plt.show()  # Exibe o gráfico na tela
+            plt.close()  # Fecha a figura para evitar sobreposição em futuras chamadas
 
     def treinar_rede(self):
         fitness = self.sec
@@ -299,6 +317,12 @@ class PongGame:
         # Armazenando erros e pesos para os gráficos
         self.erros.append(erro)
         self.pesos_hist.append(self.rede.pesosNeuronioDeSaida.copy())
+
+        # Plotar gráficos quando o jogo terminar
+        print("Plotando gráficos...")  # Mensagem de depuração
+        self.plotar_graficos()  # Garante que os gráficos sejam exibidos após o treinamento
+
+
 
         self.salvar_historico_csv()
         self.historico.clear()
