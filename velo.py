@@ -9,12 +9,11 @@ import matplotlib.pyplot as plt
 from random import uniform
 
 
-
 class RedeNeural:
     def __init__(self):
         # Inicializa pesos da rede como atributos do objeto
-        self.pesosPrimeiroNeuronioCamadaEntrada = np.array([uniform(-1, 1) for _ in range(6)])
-        self.pesosSegundoNeuronioCamadaEntrada = np.array([uniform(-1, 1) for _ in range(6)])
+        self.pesosPrimeiroNeuronioCamadaEntrada = np.array([uniform(-1, 1) for _ in range(4)])  # Ajustado para 4
+        self.pesosSegundoNeuronioCamadaEntrada = np.array([uniform(-1, 1) for _ in range(4)])  # Ajustado para 4
 
         self.pesosPrimeiroNeuronioCamadaOculta = np.array([uniform(-1, 1) for _ in range(2)])
         self.pesosSegundoNeuronioCamadaOculta = np.array([uniform(-1, 1) for _ in range(2)])
@@ -24,57 +23,46 @@ class RedeNeural:
         self.resultado = 0
 
     def feedforward(self, XRaquete, XBolinha, YBola, VelocidadeX, VelocidadeY, bias=-1):
-            entradas = np.array([XRaquete, XBolinha, YBola, VelocidadeX, VelocidadeY, bias])
+        # Ajustado para 4 entradas
+        entradas = np.array([XRaquete, XBolinha, YBola, VelocidadeX])  # Ajustado para 4 entradas
 
-            self.saidaPrimeiroNeuronioCamadaEntrada = np.tanh(np.sum(entradas * self.pesosPrimeiroNeuronioCamadaEntrada))
-            self.saidaSegundoNeuronioCamadaEntrada = np.tanh(np.sum(entradas * self.pesosSegundoNeuronioCamadaEntrada))
+        self.saidaPrimeiroNeuronioCamadaEntrada = np.tanh(np.sum(entradas * self.pesosPrimeiroNeuronioCamadaEntrada))
+        self.saidaSegundoNeuronioCamadaEntrada = np.tanh(np.sum(entradas * self.pesosSegundoNeuronioCamadaEntrada))
 
-            self.saidaPrimeiroNeuronioCamadaOculta = np.tanh(np.sum(np.array([
-                self.saidaPrimeiroNeuronioCamadaEntrada,
-                self.saidaSegundoNeuronioCamadaEntrada
-            ]) * self.pesosPrimeiroNeuronioCamadaOculta))
+        self.saidaPrimeiroNeuronioCamadaOculta = np.tanh(np.sum(np.array([
+            self.saidaPrimeiroNeuronioCamadaEntrada,
+            self.saidaSegundoNeuronioCamadaEntrada
+        ]) * self.pesosPrimeiroNeuronioCamadaOculta))
 
-            self.saidaSegundoNeuronioCamadaOculta = np.tanh(np.sum(np.array([
-                self.saidaPrimeiroNeuronioCamadaEntrada,
-                self.saidaSegundoNeuronioCamadaEntrada
-            ]) * self.pesosSegundoNeuronioCamadaOculta))
+        self.saidaSegundoNeuronioCamadaOculta = np.tanh(np.sum(np.array([
+            self.saidaPrimeiroNeuronioCamadaEntrada,
+            self.saidaSegundoNeuronioCamadaEntrada
+        ]) * self.pesosSegundoNeuronioCamadaOculta))
 
-            self.resultado = self.sigmoid(np.sum(np.array([
-                self.saidaPrimeiroNeuronioCamadaOculta,
-                self.saidaSegundoNeuronioCamadaOculta
-            ]) * self.pesosNeuronioDeSaida))
+        self.resultado = self.sigmoid(np.sum(np.array([
+            self.saidaPrimeiroNeuronioCamadaOculta,
+            self.saidaSegundoNeuronioCamadaOculta
+        ]) * self.pesosNeuronioDeSaida))
 
-            return self.resultado
+        return self.resultado
 
 
     def sigmoid(self, x):
         x = np.clip(x, -500, 500)  # Para evitar overflow
         return 1 / (1 + np.exp(-x))
 
-    def atualizaPesos(self, erro, entradas, alpha=0.58):
+    def atualizaPesos(self, erro, entradas, alpha=0.1):
         # Atualiza os pesos através de gradiente descendente
-        for i in range(len(self.pesosNeuronioDeSaida)):
-            entrada_oculta = self.saidaPrimeiroNeuronioCamadaOculta if i == 0 else self.saidaSegundoNeuronioCamadaOculta
-            self.pesosNeuronioDeSaida[i] += alpha * entrada_oculta * erro
-
-        for i in range(len(self.pesosPrimeiroNeuronioCamadaOculta)):
-            entrada_entrada = self.saidaPrimeiroNeuronioCamadaEntrada if i == 0 else self.saidaSegundoNeuronioCamadaEntrada
-            self.pesosPrimeiroNeuronioCamadaOculta[i] += alpha * entrada_entrada * erro
-
-        for i in range(len(self.pesosSegundoNeuronioCamadaOculta)):
-            entrada_entrada = self.saidaPrimeiroNeuronioCamadaEntrada if i == 0 else self.saidaSegundoNeuronioCamadaEntrada
-            self.pesosSegundoNeuronioCamadaOculta[i] += alpha * entrada_entrada * erro
-
-        for i in range(len(self.pesosPrimeiroNeuronioCamadaEntrada)):
-
-            self.pesosPrimeiroNeuronioCamadaEntrada[i] += alpha * entradas[i] * erro
-
-        for i in range(len(self.pesosSegundoNeuronioCamadaEntrada)):
-            self.pesosSegundoNeuronioCamadaEntrada[i] += alpha * entradas[i] * erro
+        self.pesosNeuronioDeSaida += alpha * np.array([self.saidaPrimeiroNeuronioCamadaOculta, self.saidaSegundoNeuronioCamadaOculta]) * erro
+        self.pesosPrimeiroNeuronioCamadaOculta += alpha * np.array([self.saidaPrimeiroNeuronioCamadaEntrada, self.saidaSegundoNeuronioCamadaEntrada]) * erro
+        self.pesosSegundoNeuronioCamadaOculta += alpha * np.array([self.saidaPrimeiroNeuronioCamadaEntrada, self.saidaSegundoNeuronioCamadaEntrada]) * erro
+        self.pesosPrimeiroNeuronioCamadaEntrada += alpha * entradas[:4] * erro  # Vetor com 4 elementos
+        self.pesosSegundoNeuronioCamadaEntrada += alpha * entradas[:4] * erro  # Vetor com 4 elementos
 
 
 class PongGame:
-    def __init__(self, headless=False, id_thread=0, width=640, height=480):
+    def __init__(self, headless=False, id_thread=0, width=640, height=480, alpha=0.80):
+        self.alpha = alpha
         self.headless = headless
         self.id_thread = id_thread
         self.width = width
@@ -180,7 +168,7 @@ class PongGame:
         VelocidadeX_norm = self.x_change / 10
         VelocidadeY_norm = self.y_change / 10
 
-        # Alimenta a rede com o X da raquete
+        # Alimenta a rede com as entradas
         decisao = self.rede.feedforward(
             XRaquete_norm,
             XBolinha_norm,
@@ -189,28 +177,15 @@ class PongGame:
             VelocidadeY_norm
         )
 
-        # Movimento entre -5 e 5, ajustando proporcionalmente à velocidade da bolinha
-        movimento = (decisao - 0.5) * 10  # Movimento entre -5 e 5
+        # Ajuste o movimento da raquete para seguir a bola
+        # A raquete deve tentar alcançar a posição X da bola
+        erro_posicao = self.x_cor - self.rect_x  # Erro entre a posição da raquete e da bola
+        movimento = erro_posicao * 0.1  # Multiplicador para suavizar o movimento
 
-        # Ajuste da velocidade da raquete com base na velocidade da bolinha
-        fator_proporcional = abs(VelocidadeX_norm) + abs(VelocidadeY_norm)  # A velocidade total da bolinha
-        movimento *= fator_proporcional  # Proporcionalidade do movimento da raquete
+        # Proporcionalidade do movimento com base na velocidade da bola
+        movimento *= abs(VelocidadeX_norm) + abs(VelocidadeY_norm)
 
-        # Para garantir que a raquete tenha um movimento mínimo e não fique lenta
-        if abs(movimento) < 1:
-            movimento = 2 if movimento > 0 else -2
-
-        # Ajustando o movimento para garantir que a raquete se mova para a borda correta
-        if self.rect_x <= 1:
-            self.frames_no_canto += 1
-            movimento = 5  # Valor fixo para direita
-        elif self.rect_x >= self.width - 101:
-            self.frames_no_canto += 1
-            movimento = -5  # Valor fixo para esquerda
-        else:
-            self.frames_no_canto = 0
-
-        # Garante que a raquete não ultrapasse os limites da tela
+        # Limitar o movimento da raquete para que não ultrapasse os limites da tela
         if self.rect_x + movimento < 0:
             movimento = -self.rect_x  # Garante que a raquete não ultrapasse a borda esquerda
         elif self.rect_x + movimento > self.width - 100:
@@ -221,8 +196,10 @@ class PongGame:
         # Armazenar o movimento atual para evitar repetições no próximo ciclo
         self.ultimo_movimento = movimento
 
+        # Salvar as entradas para o histórico
         entrada = [self.rect_x / self.width, self.x_cor / self.width, self.y_cor / self.height,
-        self.x_change / 10, self.y_change / 10, -1]
+                self.x_change / 10, self.y_change / 10, -1]
+        self.historico.append({'entrada': entrada, 'decisao': decisao})
 
 
     def atualizar_bola(self):
@@ -290,6 +267,7 @@ class PongGame:
                 self.rede.pesosSegundoNeuronioCamadaOculta.copy(),
                 self.rede.pesosNeuronioDeSaida.copy()
             ]
+
         else:
             (
                 self.rede.pesosPrimeiroNeuronioCamadaEntrada,
@@ -299,21 +277,24 @@ class PongGame:
                 self.rede.pesosNeuronioDeSaida
             ) = self.melhores_pesos
 
+
         for registro in self.historico:
             entradas = registro['entrada']
             decisao = registro['decisao']
             movimento = decisao
             penalidade_canto = 0
             if self.frames_no_canto > 1:
-                penalidade_canto = 1.0  # penalidade forte para sair do canto
+                penalidade_canto = 1.0  # Penalidade forte para sair do canto
 
             # Calculando o erro incluindo a penalidade
             erro = (entradas[0] - entradas[1]) / 100 + penalidade_canto
 
+            # Salvar erros e pesos para gráficos
+            self.rede.feedforward(*entradas)  # Passa as entradas pela rede
+            self.rede.atualizaPesos(erro, entradas, self.alpha)  # Passa o alpha corretamente
 
-        # Salvar erros e pesos para gráficos
-        self.rede.feedforward(*entradas)
-        self.rede.atualizaPesos(erro, entradas)
+
+
 
         # Armazenando erros e pesos para os gráficos
         self.erros.append(erro)
