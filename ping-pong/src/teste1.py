@@ -22,20 +22,28 @@ class RedeNeural:
 
         self.resultado = 0
 
-    def feedforward(self, YRaquete, XBolinha, YBola, VelocidadeX, VelocidadeY, bias=-1):
-        entradas = np.array([YRaquete, XBolinha, YBola, VelocidadeX, VelocidadeY, bias])
+    def feedforward(self, XRaquete, XBolinha, YBola, VelocidadeX, VelocidadeY, bias=-1):
+        # Alterado para remover a necessidade do YRaquete
+        entradas = np.array([XRaquete, XBolinha, YBola, VelocidadeX, VelocidadeY, bias])
 
         self.saidaPrimeiroNeuronioCamadaEntrada = np.tanh(np.sum(entradas * self.pesosPrimeiroNeuronioCamadaEntrada))
         self.saidaSegundoNeuronioCamadaEntrada = np.tanh(np.sum(entradas * self.pesosSegundoNeuronioCamadaEntrada))
-        self.saidaPrimeiroNeuronioCamadaOculta = np.tanh(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaEntrada,
-                                                                                 self.saidaSegundoNeuronioCamadaEntrada]) * self.pesosPrimeiroNeuronioCamadaOculta))
-        self.saidaSegundoNeuronioCamadaOculta = np.tanh(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaEntrada,
-                                                                                 self.saidaSegundoNeuronioCamadaEntrada]) * self.pesosSegundoNeuronioCamadaOculta))
+        self.saidaPrimeiroNeuronioCamadaOculta = np.tanh(np.sum(np.array([
+            self.saidaPrimeiroNeuronioCamadaEntrada,
+            self.saidaSegundoNeuronioCamadaEntrada
+        ]) * self.pesosPrimeiroNeuronioCamadaOculta))
+        self.saidaSegundoNeuronioCamadaOculta = np.tanh(np.sum(np.array([
+            self.saidaPrimeiroNeuronioCamadaEntrada,
+            self.saidaSegundoNeuronioCamadaEntrada
+        ]) * self.pesosSegundoNeuronioCamadaOculta))
 
-        self.resultado = self.sigmoid(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaOculta,
-                                                            self.saidaSegundoNeuronioCamadaOculta]) * self.pesosNeuronioDeSaida))
+        self.resultado = self.sigmoid(np.sum(np.array([
+            self.saidaPrimeiroNeuronioCamadaOculta,
+            self.saidaSegundoNeuronioCamadaOculta
+        ]) * self.pesosNeuronioDeSaida))
 
         return self.resultado
+
 
     def sigmoid(self, x):
         x = np.clip(x, -500, 500)  # Para evitar overflow
@@ -203,24 +211,26 @@ class PongGame:
                 writer.writerow(linha)
 
     def move_player(self):
-        YRaquete_norm = self.rect_x / self.width
-        XBolinha_norm = self.x_cor / self.width
-        YBola_norm = self.y_cor / self.height
-        VelocidadeX_norm = self.x_change / 10
-        VelocidadeY_norm = self.y_change / 10
-        
-        decisao = self.rede.feedforward(
-            YRaquete_norm,
-            XBolinha_norm,
-            YBola_norm,
-            VelocidadeX_norm,
-            VelocidadeY_norm
-        )
-        movimento = (decisao - 0.5) * 10  # movimento entre -5 e 5
+        # Normaliza as entradas com a posição X da raquete, posição X e Y da bolinha
+        XRaquete_norm = self.rect_x / self.width  # Posição X da raquete
+        XBolinha_norm = self.x_cor / self.width  # Posição X da bolinha
+        YBola_norm = self.y_cor / self.height    # Posição Y da bolinha
 
+        # Alimenta a rede neural para calcular a decisão do movimento da raquete
+        decisao = self.rede.feedforward(
+            XRaquete_norm,  # Passando só a posição X da raquete
+            XBolinha_norm,  # Passando a posição X da bolinha
+            YBola_norm      # Passando a posição Y da bolinha
+        )
+
+        # Movimento da raquete entre -5 e 5
+        movimento = (decisao - 0.5) * 10  # Movimento entre -5 e 5
+
+        # Armazenamento do histórico com as entradas e a decisão da rede neural
         entrada = [self.rect_x, self.x_cor, self.y_cor, self.x_change, self.y_change, -1]
         self.historico.append({'entrada': entrada, 'decisao': decisao})
 
+        # Ajusta o movimento para garantir que a raquete não ultrapasse as bordas da tela
         if self.rect_x <= 1:
             self.frames_no_canto += 1
             movimento = 5  # Valor fixo para direita
@@ -230,12 +240,15 @@ class PongGame:
         else:
             self.frames_no_canto = 0
 
+        # Garante que a raquete não ultrapasse os limites da tela
         if self.rect_x + movimento < 0:
-            movimento = -self.rect_x
+            movimento = -self.rect_x  # Garante que a raquete não ultrapasse a borda esquerda
         elif self.rect_x + movimento > self.width - 100:
-            movimento = (self.width - 100) - self.rect_x
+            movimento = (self.width - 100) - self.rect_x  # Garante que a raquete não ultrapasse a borda direita
 
+        # Atualiza a posição da raquete com base no movimento calculado
         self.rect_x += movimento
+
 
 
     def atualizar_bola(self):

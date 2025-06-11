@@ -2,12 +2,11 @@ import pygame
 import sys
 import random
 import numpy as np
-from random import uniform
 import time
 import csv
 import os
-import threading
 import matplotlib.pyplot as plt
+from random import uniform
 
 
 
@@ -24,55 +23,54 @@ class RedeNeural:
 
         self.resultado = 0
 
-    # Antes de alimentar a rede, normalize os valores
-    def feedforward(self, YRaquete, XBolinha, YBola, VelocidadeX, VelocidadeY, bias=-1):
-        entradas = np.array([YRaquete, XBolinha, YBola, VelocidadeX, VelocidadeY, bias])
-    # Resto da função...
+    def feedforward(self, XRaquete, XBolinha, YBola, VelocidadeX, VelocidadeY, bias=-1):
+            entradas = np.array([XRaquete, XBolinha, YBola, VelocidadeX, VelocidadeY, bias])
 
+            self.saidaPrimeiroNeuronioCamadaEntrada = np.tanh(np.sum(entradas * self.pesosPrimeiroNeuronioCamadaEntrada))
+            self.saidaSegundoNeuronioCamadaEntrada = np.tanh(np.sum(entradas * self.pesosSegundoNeuronioCamadaEntrada))
 
-        self.saidaPrimeiroNeuronioCamadaEntrada = round(
-            np.tanh(np.sum(entradas * self.pesosPrimeiroNeuronioCamadaEntrada)), 6)
+            self.saidaPrimeiroNeuronioCamadaOculta = np.tanh(np.sum(np.array([
+                self.saidaPrimeiroNeuronioCamadaEntrada,
+                self.saidaSegundoNeuronioCamadaEntrada
+            ]) * self.pesosPrimeiroNeuronioCamadaOculta))
 
-        self.saidaSegundoNeuronioCamadaEntrada = round(
-            np.tanh(np.sum(entradas * self.pesosSegundoNeuronioCamadaEntrada)), 6)
+            self.saidaSegundoNeuronioCamadaOculta = np.tanh(np.sum(np.array([
+                self.saidaPrimeiroNeuronioCamadaEntrada,
+                self.saidaSegundoNeuronioCamadaEntrada
+            ]) * self.pesosSegundoNeuronioCamadaOculta))
 
-        self.saidaPrimeiroNeuronioCamadaOculta = round(
-            np.tanh(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaEntrada, self.saidaSegundoNeuronioCamadaEntrada]) * self.pesosPrimeiroNeuronioCamadaOculta)), 6)
+            self.resultado = self.sigmoid(np.sum(np.array([
+                self.saidaPrimeiroNeuronioCamadaOculta,
+                self.saidaSegundoNeuronioCamadaOculta
+            ]) * self.pesosNeuronioDeSaida))
 
-        self.saidaSegundoNeuronioCamadaOculta = round(
-            np.tanh(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaEntrada, self.saidaSegundoNeuronioCamadaEntrada]) * self.pesosSegundoNeuronioCamadaOculta)), 6)
-
-        self.resultado = round(self.sigmoid(np.sum(np.array([self.saidaPrimeiroNeuronioCamadaOculta, self.saidaSegundoNeuronioCamadaOculta]) * self.pesosNeuronioDeSaida)), 6)
-
-        return self.resultado
+            return self.resultado
 
 
     def sigmoid(self, x):
+        x = np.clip(x, -500, 500)  # Para evitar overflow
         return 1 / (1 + np.exp(-x))
 
-    def atualizaPesos(self, erro, entradas, alpha=0.01):
-    # Atualiza pesos da camada de saída (2 pesos)
+    def atualizaPesos(self, erro, entradas, alpha=0.99):
+        # Atualiza os pesos através de gradiente descendente
         for i in range(len(self.pesosNeuronioDeSaida)):
             entrada_oculta = self.saidaPrimeiroNeuronioCamadaOculta if i == 0 else self.saidaSegundoNeuronioCamadaOculta
             self.pesosNeuronioDeSaida[i] += alpha * entrada_oculta * erro
 
-        # Atualiza pesos da primeira camada oculta (2 pesos)
         for i in range(len(self.pesosPrimeiroNeuronioCamadaOculta)):
             entrada_entrada = self.saidaPrimeiroNeuronioCamadaEntrada if i == 0 else self.saidaSegundoNeuronioCamadaEntrada
             self.pesosPrimeiroNeuronioCamadaOculta[i] += alpha * entrada_entrada * erro
 
-        # Atualiza pesos da segunda camada oculta (2 pesos)
         for i in range(len(self.pesosSegundoNeuronioCamadaOculta)):
             entrada_entrada = self.saidaPrimeiroNeuronioCamadaEntrada if i == 0 else self.saidaSegundoNeuronioCamadaEntrada
             self.pesosSegundoNeuronioCamadaOculta[i] += alpha * entrada_entrada * erro
 
-        # Atualiza pesos da camada de entrada (agora 6 pesos)
         for i in range(len(self.pesosPrimeiroNeuronioCamadaEntrada)):
+
             self.pesosPrimeiroNeuronioCamadaEntrada[i] += alpha * entradas[i] * erro
 
         for i in range(len(self.pesosSegundoNeuronioCamadaEntrada)):
             self.pesosSegundoNeuronioCamadaEntrada[i] += alpha * entradas[i] * erro
-
 
 
 class PongGame:
@@ -82,7 +80,6 @@ class PongGame:
         self.width = width
         self.height = height
 
-        # Inicializar cores SEMPRE, pois são usadas na lógica também
         self.green = (0, 200, 200)
         self.black = (0, 0, 0)
         self.white = (255, 255, 255)
@@ -100,8 +97,6 @@ class PongGame:
             self.display = None
             self.clock = None
             self.font = None
-
-        # resto da inicialização... 
 
         self.rect_x = 272
         self.rect_y = 470
@@ -129,28 +124,6 @@ class PongGame:
 
         self.historico = self.carregar_historico_csv()
 
-    def plotar_graficos(self):
-        # Gráfico de erro ao longo do tempo
-        plt.figure(figsize=(10, 5))
-        plt.plot(self.erros)
-        plt.title("Evolução do Erro")
-        plt.xlabel("Epoch")
-        plt.ylabel("Erro")
-        plt.grid(True)
-        plt.savefig("grafico_erro.png")  # Salva o gráfico de erro
-        plt.close()
-
-        # Gráfico de pesos da rede neural ao longo do tempo
-        pesos_media = [np.mean(np.array(pesos)) for pesos in self.pesos_hist]
-        plt.figure(figsize=(10, 5))
-        plt.plot(pesos_media)
-        plt.title("Evolução dos Pesos")
-        plt.xlabel("Epoch")
-        plt.ylabel("Média dos Pesos")
-        plt.grid(True)
-        plt.savefig("grafico_pesos.png")  # Salva o gráfico de pesos
-        plt.close()
-
     def carregar_historico_csv(self):
         historico = []
         if os.path.exists('historico.csv'):
@@ -163,6 +136,34 @@ class PongGame:
                         historico.append({'entrada': entrada, 'decisao': decisao})
         return historico
 
+    def plotar_graficos(self):
+        print("Plotando gráficos...")  # Adiciona log para depuração
+
+        # Gráfico de erro ao longo do tempo
+        if len(self.erros) > 0:
+            plt.figure(figsize=(10, 5))
+            plt.plot(self.erros)
+            plt.title("Evolução do Erro")
+            plt.xlabel("Epoch")
+            plt.ylabel("Erro")
+            plt.grid(True)
+            plt.savefig("grafico_erro.png")  # Salva o gráfico de erro
+            plt.show()  # Exibe o gráfico imediatamente
+            plt.close()
+
+        # Gráfico de pesos da rede neural ao longo do tempo
+        if len(self.pesos_hist) > 0:
+            pesos_media = [np.mean(np.array(pesos)) for pesos in self.pesos_hist]
+            plt.figure(figsize=(10, 5))
+            plt.plot(pesos_media)
+            plt.title("Evolução dos Pesos")
+            plt.xlabel("Epoch")
+            plt.ylabel("Média dos Pesos")
+            plt.grid(True)
+            plt.savefig("grafico_pesos.png")  # Salva o gráfico de pesos
+            plt.show()  # Exibe o gráfico imediatamente
+            plt.close()
+
     def salvar_historico_csv(self):
         filename = f"historico_{self.id_thread}.csv" if self.headless else "historico.csv"
         with open(filename, 'w', newline='') as csvfile:
@@ -172,24 +173,34 @@ class PongGame:
                 writer.writerow(linha)
 
     def move_player(self):
-        YRaquete_norm = self.rect_x / self.width
+        # Normaliza as entradas
+        XRaquete_norm = self.rect_x / self.width
         XBolinha_norm = self.x_cor / self.width
         YBola_norm = self.y_cor / self.height
         VelocidadeX_norm = self.x_change / 10
         VelocidadeY_norm = self.y_change / 10
-        
+
+        # Alimenta a rede com o X da raquete
         decisao = self.rede.feedforward(
-            YRaquete_norm,
+            XRaquete_norm,
             XBolinha_norm,
             YBola_norm,
             VelocidadeX_norm,
             VelocidadeY_norm
         )
-        movimento = (decisao - 0.5) * 10  # movimento entre -5 e 5
 
-        entrada = [self.rect_x, self.x_cor, self.y_cor, self.x_change, self.y_change, -1]
-        self.historico.append({'entrada': entrada, 'decisao': decisao})
+        # Movimento entre -5 e 5, ajustando proporcionalmente à velocidade da bolinha
+        movimento = (decisao - 0.5) * 10  # Movimento entre -5 e 5
 
+        # Ajuste da velocidade da raquete com base na velocidade da bolinha
+        fator_proporcional = abs(VelocidadeX_norm) + abs(VelocidadeY_norm)  # A velocidade total da bolinha
+        movimento *= fator_proporcional  # Proporcionalidade do movimento da raquete
+
+        # Para garantir que a raquete tenha um movimento mínimo e não fique lenta
+        if abs(movimento) < 1:
+            movimento = 2 if movimento > 0 else -2
+
+        # Ajustando o movimento para garantir que a raquete se mova para a borda correta
         if self.rect_x <= 1:
             self.frames_no_canto += 1
             movimento = 5  # Valor fixo para direita
@@ -199,35 +210,72 @@ class PongGame:
         else:
             self.frames_no_canto = 0
 
+        # Garante que a raquete não ultrapasse os limites da tela
         if self.rect_x + movimento < 0:
-            movimento = -self.rect_x
+            movimento = -self.rect_x  # Garante que a raquete não ultrapasse a borda esquerda
         elif self.rect_x + movimento > self.width - 100:
-            movimento = (self.width - 100) - self.rect_x
+            movimento = (self.width - 100) - self.rect_x  # Garante que a raquete não ultrapasse a borda direita
 
-        self.rect_x += movimento
+        self.rect_x += movimento  # Aplica o movimento na posição
+
+        # Armazenar o movimento atual para evitar repetições no próximo ciclo
+        self.ultimo_movimento = movimento
+
+        entrada = [self.rect_x / self.width, self.x_cor / self.width, self.y_cor / self.height,
+        self.x_change / 10, self.y_change / 10, -1]
+
 
     def atualizar_bola(self):
         self.x_cor += self.x_change
         self.y_cor += self.y_change
 
+        # Impede que a bola saia dos limites da tela
         self.x_cor = max(15, min(self.x_cor, self.width - 15))
         self.y_cor = max(15, min(self.y_cor, self.height - 15))
 
+        # Colisão com as paredes laterais
         if self.x_cor == 15 or self.x_cor == self.width - 15:
             self.x_change *= -1
 
+        # Colisão com o topo (parte superior da tela)
         if self.y_cor == 15:
-            self.y_change *= -1
+            self.y_change *= -1  # Inverte a direção da bola quando bate no topo
 
+        # Colisão com a raquete
         barra_rect = pygame.Rect(self.rect_x, self.rect_y, 100, 100)
         bola_rect = pygame.Rect(int(self.x_cor - 15), int(self.y_cor - 15), 30, 30)
 
         if bola_rect.colliderect(barra_rect):
-            self.y_change *= -1
+            self.y_change *= -1  # Inverte a direção da bola ao colidir com a raquete
+            movimento_extra = 2.0  # Ajuste a velocidade para tornar o jogo mais dinâmico
+            if self.rect_x < self.width / 2:  # Se a raquete estiver à esquerda
+                self.rect_x += movimento_extra
+            else:  # Se a raquete estiver à direita
+                self.rect_x -= movimento_extra
 
+        # Colisão com o chão
         if self.y_cor > self.height - 20:
             self.floor_collision = True
-            self.y_change *= -1
+            self.y_change *= -1  # Reverte a direção quando atinge o chão
+            self.reiniciar_jogo()  # Reinicia o jogo
+
+    def reiniciar_jogo(self):
+        """Reinicia o jogo, resetando variáveis"""
+        # Definir a posição inicial da bola
+        self.x_cor = random.randint(15, self.width - 15)  # Posição X aleatória
+        self.y_cor = 15  # Posição Y no topo da tela (parte mais alta)
+        
+        # Inicializa a direção da bola com valores aleatórios para que a bola não fique estática
+        self.x_change = random.randint(3, 7) * random.choice([-1, 1])  # Direção aleatória no eixo X
+        self.y_change = random.randint(3, 7)  # Movimento sempre para baixo no eixo Y
+        
+        # Posição da raquete
+        self.rect_x = 272
+        self.rect_y = 470
+        self.frames_no_canto = 0
+        self.floor_collision = False
+        self.sec = 0
+        self.historico.clear()  # Limpar o histórico para o próximo treinamento
 
     def treinar_rede(self):
         fitness = self.sec
@@ -255,14 +303,21 @@ class PongGame:
             entradas = registro['entrada']
             decisao = registro['decisao']
             movimento = decisao
+            penalidade_canto = 0
+            if self.frames_no_canto > 1:
+                penalidade_canto = 1.0  # penalidade forte para sair do canto
 
-            erro = (entradas[0] + movimento - entradas[2]) / 100  # Ajuste do erro
+            # Calculando o erro incluindo a penalidade
+            erro = (entradas[0] - entradas[1]) / 100 + penalidade_canto
 
-            self.rede.feedforward(*entradas)
-            self.rede.atualizaPesos(erro, entradas)
 
-            self.erros.append(erro)
-            self.pesos_hist.append(self.rede.pesosNeuronioDeSaida.copy())
+        # Salvar erros e pesos para gráficos
+        self.rede.feedforward(*entradas)
+        self.rede.atualizaPesos(erro, entradas)
+
+        # Armazenando erros e pesos para os gráficos
+        self.erros.append(erro)
+        self.pesos_hist.append(self.rede.pesosNeuronioDeSaida.copy())
 
         self.salvar_historico_csv()
         self.historico.clear()
@@ -299,21 +354,32 @@ class PongGame:
             if self.floor_collision:
                 self.treinar_rede()
 
-            if self.win:
-                self.display.fill(self.black)
-                win_text = self.font.render("You Win!", True, self.green)
-                rect = win_text.get_rect(center=(self.width // 2, self.height // 2))
-                self.display.blit(win_text, rect)
-
-                # Plotar gráficos
-                self.plotar_graficos()
-
             pygame.display.flip()
             self.clock.tick(25)
+
+        # Plotar gráficos quando o jogo terminar
+        self.plotar_graficos()
 
         pygame.quit()
         sys.exit()
 
+
+# Função que reinicia o jogo e a rede neural
+def treinar_rede_multiplicadas_vezes(numero_de_treinamentos=10):
+    for i in range(numero_de_treinamentos):
+        print(f"Treinamento {i+1}/{numero_de_treinamentos}...")
+        
+        # Inicializa o jogo e a rede neural
+        game = PongGame()  # Crie ou utilize a classe do seu jogo
+        game.loop_principal()  # Roda o jogo, treinando e atualizando os pesos durante a execução
+
+        # Aqui você pode adicionar condições para salvar os melhores desempenhos, se necessário
+        # Exemplo: Salve o erro ou pesos para cada execução
+        print(f"Treinamento {i+1} finalizado. Pesos atualizados!")
+        
+# Chame a função para treinar múltiplas vezes
+treinar_rede_multiplicadas_vezes(5)  # Treinar 5 vezes, por exemplo
+
+
 if __name__ == "__main__":
-    game = PongGame()
-    game.loop_principal()
+    treinar_rede_multiplicadas_vezes(5)  # Executa 5 treinamentos em paralelo
